@@ -75,7 +75,7 @@ class _TaskListState extends ConsumerState<TaskList> {
 
   Widget _buildTabBar() {
     return Container(
-      height: 36, // Reduced height
+      height: 45, // Increased height by 25% (was 36)
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         color: AppTheme.surfaceLight.withOpacity(0.3),

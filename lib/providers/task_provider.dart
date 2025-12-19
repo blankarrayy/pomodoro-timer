@@ -7,6 +7,7 @@ import '../services/task_storage.dart';
 import '../services/supabase_auth_service.dart';
 import '../services/sync_orchestrator.dart';
 import '../services/task_sync_service.dart';
+import 'stats_provider.dart';
 
 class TaskNotifier extends Notifier<TaskState> {
   final SupabaseAuthService _authService = SupabaseAuthService();
@@ -80,8 +81,14 @@ class TaskNotifier extends Notifier<TaskState> {
       
       await _syncOrchestrator.syncNow();
       
-      // DO NOT reload tasks here - this causes race conditions!
-      // The sync orchestrator will update storage, and we already have the latest state in memory
+      // Reload tasks from storage to reflect any changes from the server
+      await _loadTasks();
+
+      // Invalidate stats providers to force a refresh of the analytics UI
+      // We use the container's ref to invalidate other providers
+      ref.invalidate(recentStatsProvider);
+      ref.invalidate(todayStatsProvider);
+      ref.invalidate(statsProvider);
       
       state = state.copyWith(
         isSyncing: false,
@@ -155,14 +162,17 @@ class TaskNotifier extends Notifier<TaskState> {
     final taskIndex = state.tasks.indexWhere((t) => t.id == taskId);
     if (taskIndex == -1) return;
     
-    final task = state.tasks[taskIndex];
-    final deletedTask = task.copyWith(
-      isDeleted: true, 
-      needsSync: true,
-      lastModified: DateTime.now(),
-    );
+    // 1. Remove locally immediately
+    final newTasks = [...state.tasks];
+    newTasks.removeAt(taskIndex);
     
-    _updateTaskLocally(taskIndex, deletedTask);
+    state = state.copyWith(tasks: newTasks);
+    await TaskStorage.saveTasks(newTasks);
+    
+    // 2. Fire and Forget Remote Delete (Instant)
+    if (state.isSignedIn) {
+      _syncOrchestrator.deleteRemoteTask(taskId);
+    }
   }
 
   Future<void> _updateTaskLocally(int index, Task updatedTask) async {

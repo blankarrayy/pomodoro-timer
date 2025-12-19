@@ -19,11 +19,13 @@ class StatsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final recentStatsAsync = ref.watch(recentStatsProvider);
 
+
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(),
-        slivers: [
+      body: SafeArea(
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
           
           // Breathable Header
@@ -150,6 +152,7 @@ class StatsScreen extends ConsumerWidget {
           
           const SliverToBoxAdapter(child: SizedBox(height: 120)),
         ],
+        ),
       ),
     );
   }

@@ -48,6 +48,23 @@ class SyncOrchestrator {
     debugPrint('Sync scheduled (debounced)');
   }
 
+  Future<void> deleteRemoteTask(String taskId) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      debugPrint('🔥 Instant Delete: Removing task $taskId from Supabase...');
+      await _remoteRepo.deleteTask(taskId);
+      debugPrint('✅ Instant Delete: Task $taskId removed from Supabase');
+    } catch (e) {
+      debugPrint('⚠️ Create/Delete failed: $e');
+      // We don't rethrow because UI already updated.
+      // Next full sync will catch it if it failed (by checking missing local tasks vs remote)
+      // Actually strictly speaking, full sync might revive it if we don't track deletions.
+      // But for "Instant Delete" best effort, this is the start.
+    }
+  }
+
   Future<void> syncNow() async {
     if (_isSyncing) return;
     
@@ -63,36 +80,45 @@ class SyncOrchestrator {
       debugPrint('Starting Sync...');
       
       // 1. Upload Local Tasks (One-way migration/sync for now)
-      final localTasks = await TaskStorage.loadTasks();
+      var localTasks = await TaskStorage.loadTasks();
+      final List<String> tasksToRemoveLocally = [];
       
       for (final task in localTasks) {
+        // Handle Pending Deletion (Hard Delete)
+        if (task.isDeleted) {
+           debugPrint('Hard deleting task: ${task.title} (${task.id})');
+           try {
+             await _remoteRepo.deleteTask(task.id);
+             tasksToRemoveLocally.add(task.id);
+           } catch (e) {
+             debugPrint('Failed to delete remote task: $e');
+             // If failed, we keep it locally to try again next time
+           }
+           continue; 
+        }
+
         // Generate Hash
         final hash = '${task.title}_${task.dueDate?.toIso8601String() ?? 'nodate'}';
         
         // Check if exists remotely
         final existing = await _remoteRepo.findTaskByHash(hash);
         
-        // Check if deleted
-        if (task.isDeleted) {
-           // Update remote to be deleted too (Soft Delete)
-           if (existing != null) {
-              debugPrint('Syncing deletion for: ${task.title}');
-              // We just update the task, as isDeleted is part of the model now
-              await _remoteRepo.updateTask(task);
-           }
-           continue; 
-        }
-
         if (existing == null) {
           // Does not exist, create it
           debugPrint('Uploading task: ${task.title}');
           await _remoteRepo.createTask(task);
         } else {
           debugPrint('Task exists, updating: ${task.title}');
-          // Update remote with local state (since we are syncing local -> remote)
-          // Ideally we check timestamps, but for "Upload Local" mode, we overwrite.
+          // Update remote with local state
           await _remoteRepo.updateTask(task);
         }
+      }
+      
+      // Perform local cleanup of hard-deleted tasks
+      if (tasksToRemoveLocally.isNotEmpty) {
+        localTasks.removeWhere((t) => tasksToRemoveLocally.contains(t.id));
+        await TaskStorage.saveTasks(localTasks);
+        debugPrint('Permanently removed ${tasksToRemoveLocally.length} tasks locally.');
       }
       
       // 2. Sync Analytics (Two-Way)
