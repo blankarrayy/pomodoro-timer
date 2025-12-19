@@ -10,6 +10,7 @@ import 'ui/app_theme.dart';
 import 'services/sync_orchestrator.dart';
 import 'screens/settings_screen.dart';
 import 'screens/stats_screen.dart';
+import 'screens/splash_screen.dart';
 import 'services/notification_service.dart';
 import 'services/stats_storage.dart';
 import 'services/desktop_overlay_service.dart';
@@ -71,7 +72,7 @@ class FocusForgeApp extends StatelessWidget {
           PointerDeviceKind.unknown,
         },
       ),
-      home: const MainLayout(),
+      home: const SplashScreen(),
     );
   }
 }

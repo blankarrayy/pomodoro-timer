@@ -43,7 +43,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Account created! Please sign in.', style: GoogleFonts.inter(color: Colors.white)),
+            content: Text('Please check your email for a confirmation link, then sign in with your email and password.', style: GoogleFonts.inter(color: Colors.white)),
             backgroundColor: Colors.green,
           ),
         );
@@ -177,6 +177,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
                               ),
                               keyboardType: TextInputType.emailAddress,
                               validator: (value) => value == null || value.isEmpty ? 'Please enter your email' : null,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'A confirmation email will be sent. Please double-check your email address.',
+                              style: GoogleFonts.outfit(
+                                color: AppTheme.textSecondary.withOpacity(0.8),
+                                fontSize: 12,
+                                fontStyle: FontStyle.italic,
+                              ),
+                              textAlign: TextAlign.left,
                             ),
                             const SizedBox(height: 16),
                             TextFormField(

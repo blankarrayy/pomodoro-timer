@@ -111,6 +111,6 @@ installer/
 **/ios/Flutter/flutter_export_environment.sh
 **/ios/ServiceDefinitions.json
 **/ios/Runner/GeneratedPluginRegistrant.*
-FocusForge-Installer.dmg
+installers/
 create_dmg.sh
-.env
+FocusForge-Installer.dmg
