@@ -9,8 +9,9 @@ import '../models/session_stats.dart';
 import '../models/timer_state.dart';
 import '../services/settings_service.dart';
 import '../services/desktop_overlay_service.dart';
+import '../providers/stats_provider.dart';
 
-class TimerService extends StateNotifier<TimerState> {
+class TimerService extends Notifier<TimerState> {
   Timer? _timer;
   late int _workDuration;
   late int _shortBreakDuration;
@@ -20,8 +21,9 @@ class TimerService extends StateNotifier<TimerState> {
   late bool _isBreakTime;
   late bool _isLongBreak;
   late int _sessionsUntilLongBreak;
+  String? _focusSoundPath;
+  String? _breakSoundPath;
   late SharedPreferences _prefs;
-  final VoidCallback? onStatsUpdated;
 
   int get workDuration => _workDuration;
   int get shortBreakDuration => _shortBreakDuration;
@@ -31,16 +33,11 @@ class TimerService extends StateNotifier<TimerState> {
   bool get isBreakTime => _isBreakTime;
   bool get isLongBreak => _isLongBreak;
   int get sessionsUntilLongBreak => _sessionsUntilLongBreak;
+  String? get focusSoundPath => _focusSoundPath;
+  String? get breakSoundPath => _breakSoundPath;
 
-  TimerService({this.onStatsUpdated}) : super(TimerState(
-    completedSessions: 0,
-    totalFocusTime: const Duration(),
-    isRunning: false,
-    currentDuration: const Duration(minutes: 25),
-    isBreak: false,
-    isLongBreak: false,
-    totalDuration: const Duration(minutes: 25),
-  )) {
+  @override
+  TimerState build() {
     _workDuration = 25 * 60;
     _shortBreakDuration = 5 * 60;
     _longBreakDuration = 15 * 60;
@@ -50,7 +47,22 @@ class TimerService extends StateNotifier<TimerState> {
     _isLongBreak = false;
     _sessionsUntilLongBreak = 4;
     
+    ref.onDispose(() {
+      _timer?.cancel();
+      savePreferences();
+    });
+
     _initializeService();
+
+    return TimerState(
+      completedSessions: 0,
+      totalFocusTime: const Duration(),
+      isRunning: false,
+      currentDuration: const Duration(minutes: 25),
+      isBreak: false,
+      isLongBreak: false,
+      totalDuration: const Duration(minutes: 25),
+    );
   }
 
   Future<void> _initializeService() async {
@@ -96,6 +108,8 @@ class TimerService extends StateNotifier<TimerState> {
       _autoStartBreak = settings['autoStartBreak'];
       _autoStartWork = settings['autoStartWork'];
       _sessionsUntilLongBreak = settings['sessionsUntilLongBreak'];
+      _focusSoundPath = settings['focusSoundPath'];
+      _breakSoundPath = settings['breakSoundPath'];
       
       if (!state.isRunning) {
         final newDuration = Duration(
@@ -173,6 +187,14 @@ class TimerService extends StateNotifier<TimerState> {
     }
   }
 
+  void toggleTimer() {
+    if (state.isRunning) {
+      pauseTimer();
+    } else {
+      startTimer();
+    }
+  }
+
   Future<void> _completeSession() async {
     try {
       final sessionDuration = Duration(
@@ -197,7 +219,8 @@ class TimerService extends StateNotifier<TimerState> {
         await savePreferences();
         
         // Notify that stats have been updated
-        onStatsUpdated?.call();
+        ref.invalidate(todayStatsProvider);
+        ref.invalidate(statsProvider);
       }
       
       _isBreakTime = !_isBreakTime;
@@ -224,7 +247,10 @@ class TimerService extends StateNotifier<TimerState> {
 
       // Play completion sound
       try {
-        await NotificationService.playSound(_isBreakTime);
+        await NotificationService.playSound(
+          _isBreakTime,
+          soundPath: _isBreakTime ? _breakSoundPath : _focusSoundPath,
+        );
       } catch (e) {
         print('Error playing completion sound: $e');
       }
@@ -268,6 +294,8 @@ class TimerService extends StateNotifier<TimerState> {
     bool? newAutoStartBreak,
     bool? newAutoStartWork,
     int? newSessionsUntilLongBreak,
+    String? newFocusSoundPath,
+    String? newBreakSoundPath,
   }) {
     if (newWorkDuration != null) {
       _workDuration = newWorkDuration * 60;
@@ -290,6 +318,8 @@ class TimerService extends StateNotifier<TimerState> {
     if (newAutoStartBreak != null) _autoStartBreak = newAutoStartBreak;
     if (newAutoStartWork != null) _autoStartWork = newAutoStartWork;
     if (newSessionsUntilLongBreak != null) _sessionsUntilLongBreak = newSessionsUntilLongBreak;
+    if (newFocusSoundPath != null) _focusSoundPath = newFocusSoundPath;
+    if (newBreakSoundPath != null) _breakSoundPath = newBreakSoundPath;
   }
 
   void resetTimer() {
@@ -364,12 +394,5 @@ class TimerService extends StateNotifier<TimerState> {
       currentDuration: newDuration,
       totalDuration: newDuration,  // Ensure totalDuration is set
     );
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    savePreferences();
-    super.dispose();
   }
 }

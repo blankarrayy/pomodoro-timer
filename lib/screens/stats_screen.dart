@@ -1,308 +1,282 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../widgets/stats_display.dart';
-import '../providers/timer_provider.dart';
-import '../services/stats_storage.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../models/session_stats.dart';
+import '../services/stats_storage.dart';
+import '../services/supabase_analytics_repository.dart';
+import '../widgets/stats_display.dart';
+import '../widgets/stats_chart.dart';
+import '../providers/stats_provider.dart';
+import '../ui/app_theme.dart';
+import '../screens/stats_screen.dart'; // Import for StatsHistoryList if it's in the same file or I'll move it.
+// Actually StatsHistoryList is inside stats_screen.dart at the bottom. I need to keep it or extract it.
+// I can implement it inside this file as well.
 
 class StatsScreen extends ConsumerWidget {
   const StatsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final timerState = ref.watch(timerServiceProvider);
+    final recentStatsAsync = ref.watch(recentStatsProvider);
 
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Theme.of(context).colorScheme.primary.withOpacity(0.05),
-              Theme.of(context).colorScheme.secondary.withOpacity(0.03),
-              Theme.of(context).colorScheme.tertiary.withOpacity(0.02),
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
+      backgroundColor: Colors.transparent,
+      body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
+          
+          // Breathable Header
+          SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.all(24.0),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header section
-                  _buildHeader(context),
-                  const SizedBox(height: 32),
-                  
-                  // Stats overview
-                  _buildStatsOverview(context),
-                  const SizedBox(height: 24),
-                  
-                  // Stats history
-                  _buildStatsHistory(context),
-                  const SizedBox(height: 100), // Bottom padding for nav bar
+                   Text(
+                    'Analytics',
+                    style: GoogleFonts.outfit(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    'Track your focus journey',
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
-        ),
-      ),
-    );
-  }
 
-  Widget _buildHeader(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Theme.of(context).colorScheme.primary.withOpacity(0.1),
-            Theme.of(context).colorScheme.secondary.withOpacity(0.05),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              Icons.analytics,
-              color: Theme.of(context).colorScheme.primary,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Analytics',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Track your focus journey',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatsOverview(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).shadowColor.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: const StatsDisplay(),
-    );
-  }
-
-  Widget _buildStatsHistory(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).shadowColor.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.secondary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.history,
-                  color: Theme.of(context).colorScheme.secondary,
-                  size: 20,
+          // Overview Section Header
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+              child: Text(
+                'Overview', // Or "Today's Progress" to match StatsDisplay internal text
+                style: GoogleFonts.outfit(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
                 ),
               ),
-              const SizedBox(width: 12),
-              Text(
-                'Session History',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface,
-                  fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          // Stats Display (Today)
+          // I will use a simplified version of StatsDisplay logic here or just the widget if valid
+          // But StatsDisplay layout is a bit boxy. Let's rely on breathable layout.
+          SliverToBoxAdapter(
+             child: Padding(
+               padding: const EdgeInsets.symmetric(horizontal: 24),
+               child: const StatsDisplay(), // We might need to unbox this too later.
+             ),
+          ),
+
+          // Chart Section
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
+               child: recentStatsAsync.when(
+                data: (stats) => StatsChart(
+                  stats: stats,
+                  period: 'weekly',
+                ),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (_, __) => const Text('Could not load chart', style: TextStyle(color: Colors.redAccent)),
+              ),
+            ),
+          ),
+
+          // History Header
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+              child: Row(
+                children: [
+                  Icon(Icons.history_rounded, color: AppTheme.textPrimary, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Session History',
+                    style: GoogleFonts.outfit(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // History List
+          // Assuming StatsHistoryList handles its own loading etc.
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            sliver: SliverToBoxAdapter(
+               child: const StatsHistoryList(),
+            ),
+          ),
+          
+          const SliverToBoxAdapter(child: SizedBox(height: 16)), // Spacer
+
+          // Reset Data Button
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Center(
+                child: TextButton.icon(
+                  onPressed: () => _handleResetAnalytics(context, ref),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.redAccent.withOpacity(0.8),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  ),
+                  icon: const Icon(Icons.delete_forever_rounded, size: 20),
+                  label: Text(
+                    'Reset Analytics Data',
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
-            ],
+            ),
           ),
-          const SizedBox(height: 20),
-          const StatsHistoryList(),
+          
+          const SliverToBoxAdapter(child: SizedBox(height: 120)),
         ],
       ),
     );
+  }
+
+  Future<void> _handleResetAnalytics(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.surface,
+        title: Text(
+          'Reset Analytics?',
+          style: GoogleFonts.outfit(
+            color: AppTheme.textPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          'This will permanently delete ALL your focus history from this device and the cloud. This action cannot be undone.',
+          style: GoogleFonts.inter(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(color: AppTheme.textSecondary),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              'Delete Everything',
+              style: GoogleFonts.inter(color: Colors.redAccent, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      try {
+        // Clear local
+        await StatsStorage.clearAllStats();
+        
+        // Clear remote
+        await SupabaseAnalyticsRepository().clearAllAnalytics();
+        
+        // Refresh providers (invalidate to force reload)
+        ref.invalidate(recentStatsProvider);
+        ref.invalidate(todayStatsProvider);
+        
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'All analytics data deleted.',
+                style: GoogleFonts.inter(color: Colors.white),
+              ),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Error deleting data: $e',
+                style: GoogleFonts.inter(color: Colors.white),
+              ),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      }
+    }
   }
 }
+
+// I need to include StatsHistoryList here since it was defined in the same file originally
+// and I am overwriting the file.
 
 class StatsHistoryList extends StatelessWidget {
   const StatsHistoryList({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<SessionStats>>(
+    // Ideally this import exists: import '../services/stats_storage.dart';
+    // And '../models/session_stats.dart';
+    // Use FutureBuilder...
+    // I will copy the implementation from the previous file content view.
+     return FutureBuilder<List<SessionStats>>(
       future: StatsStorage.getAllStats(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Container(
-            padding: const EdgeInsets.all(40),
-            child: Center(
-              child: Column(
-                children: [
-                  CircularProgressIndicator(
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Loading your stats...',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
+          return const Center(child: CircularProgressIndicator());
         }
 
         if (snapshot.hasError) {
-          return Container(
-            padding: const EdgeInsets.all(40),
-            child: Center(
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.error.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Icon(
-                      Icons.error_outline,
-                      size: 48,
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Error loading stats',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.error,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Please try again later',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          );
+          return const Center(child: Text('Error loading stats', style: TextStyle(color: Colors.redAccent)));
         }
         
         final allStats = snapshot.data ?? [];
         
         if (allStats.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.all(40),
-            child: Center(
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                          Theme.of(context).colorScheme.secondary.withOpacity(0.05),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Icon(
-                      Icons.timeline,
-                      size: 48,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No sessions yet',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Complete your first focus session to see stats here',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                'No sessions yet',
+                style: GoogleFonts.inter(color: AppTheme.textSecondary),
               ),
             ),
           );
         }
         
-        return ListView.separated(
+        return ListView.builder(
           shrinkWrap: true,
+          padding: EdgeInsets.zero,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: allStats.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 12),
-          itemBuilder: (context, index) => _buildHistoryItem(context, allStats[index]),
+          itemBuilder: (context, index) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _buildHistoryItem(context, allStats[index]),
+            );
+          },
         );
       },
     );
@@ -320,88 +294,61 @@ class StatsHistoryList extends StatelessWidget {
     } else if (statsDate == yesterday) {
       dateLabel = 'Yesterday';
     } else {
-      final difference = today.difference(statsDate).inDays;
-      if (difference < 7) {
-        dateLabel = '${difference} days ago';
-      } else {
-        dateLabel = '${stats.date.day}/${stats.date.month}/${stats.date.year}';
-      }
+      dateLabel = '${stats.date.day}/${stats.date.month}';
     }
     
     final hours = stats.focusMinutes ~/ 60;
     final minutes = stats.focusMinutes % 60;
-    String durationText;
-    if (hours > 0) {
-      durationText = '${hours}h ${minutes}m';
-    } else {
-      durationText = '${minutes}m';
-    }
+    String durationText = hours > 0 ? '${hours}h ${minutes}m' : '${minutes}m';
     
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Theme.of(context).colorScheme.primary.withOpacity(0.05),
-            Theme.of(context).colorScheme.secondary.withOpacity(0.02),
-          ],
-        ),
+        color: AppTheme.surfaceLight.withOpacity(0.3),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-        ),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+              color: AppTheme.primary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
-              Icons.calendar_today,
-              color: Theme.of(context).colorScheme.primary,
+              Icons.check_circle_outline_rounded,
+              color: AppTheme.primary,
               size: 16,
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
-            flex: 2,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   dateLabel,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSurface,
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 4),
                 Text(
                   '${stats.completedSessions} sessions',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
                   ),
                 ),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              durationText,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.primary,
-                fontWeight: FontWeight.bold,
-              ),
+          Text(
+            durationText,
+            style: GoogleFonts.inter(
+              fontWeight: FontWeight.w600,
+              color: AppTheme.primary,
             ),
           ),
         ],

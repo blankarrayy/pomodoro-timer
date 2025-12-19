@@ -31,9 +31,9 @@ class NotificationService {
             requestSoundPermission: false,
           ),
           macOS: DarwinInitializationSettings(
-            requestAlertPermission: false,
-            requestBadgePermission: false,
-            requestSoundPermission: false,
+            requestAlertPermission: true,
+            requestBadgePermission: true,
+            requestSoundPermission: true,
           ),
         );
 
@@ -54,7 +54,7 @@ class NotificationService {
     }
   }
 
-  static Future<void> playSound(bool isBreakTime) async {
+  static Future<void> playSound(bool isBreakTime, {String? soundPath}) async {
     try {
       // 1. Stop any currently playing audio
       await _player.stop();
@@ -62,12 +62,27 @@ class NotificationService {
       // 2. Set the correct release mode for one-shot playback
       await _player.setReleaseMode(ReleaseMode.stop);
       
-      // 3. Specify the complete asset path as it appears in pubspec.yaml
-      final source = isBreakTime ? 'sounds/break_complete.mp3' : 'sounds/focus_complete.mp3';
-      print('Attempting to play sound: $source');
+      // 3. Determine source
+      Source audioSource;
+      
+      if (soundPath != null) {
+        final file = File(soundPath);
+        if (await file.exists()) {
+           audioSource = DeviceFileSource(soundPath);
+           print('Playing custom sound from: $soundPath');
+        } else {
+           print('Custom sound file not found: $soundPath');
+           final source = isBreakTime ? 'sounds/break_complete.mp3' : 'sounds/focus_complete.mp3';
+           audioSource = AssetSource(source);
+        }
+      } else {
+        final source = isBreakTime ? 'sounds/break_complete.mp3' : 'sounds/focus_complete.mp3';
+        audioSource = AssetSource(source);
+        print('Playing default sound: $source');
+      }
       
       // 4. Play the sound
-      await _player.play(AssetSource(source));
+      await _player.play(audioSource);
       
       // 5. Wait for completion or timeout
       await Future.any([
@@ -83,6 +98,22 @@ class NotificationService {
       } catch (fallbackError) {
         print('Fallback notification also failed: $fallbackError');
       }
+    }
+  }
+
+  static Future<void> playPreview(String path) async {
+    try {
+      await _player.stop();
+      await _player.setReleaseMode(ReleaseMode.stop);
+      
+      final file = File(path);
+      if (await file.exists()) {
+        await _player.play(DeviceFileSource(path));
+      } else {
+        print('Preview file not found: $path');
+      }
+    } catch (e) {
+      print('Error playing preview: $e');
     }
   }
 

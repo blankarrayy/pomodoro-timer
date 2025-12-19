@@ -5,8 +5,10 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_linux
   bitsdojo_window_linux
-  screen_retriever
+  gtk
+  screen_retriever_linux
   system_tray
+  url_launcher_linux
   window_size
 )
 

@@ -8,182 +8,136 @@ class SyncStatusWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isSignedIn = ref.watch(isSignedInProvider);
-    final isSyncing = ref.watch(isSyncingProvider);
     final syncStatus = ref.watch(syncStatusProvider);
     final userEmail = ref.watch(userEmailProvider);
-    final syncStatsAsync = ref.watch(syncStatsProvider);
-    final lastSyncTimeAsync = ref.watch(lastSyncTimeProvider);
+    final isSyncing = ref.watch(isSyncingProvider);
 
-    return Card(
-      margin: const EdgeInsets.all(8.0),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Theme.of(context).colorScheme.primaryContainer,
+            Theme.of(context).colorScheme.secondaryContainer,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            blurRadius: 20,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  isSignedIn ? Icons.cloud_done : Icons.cloud_off_outlined,
+                  color: isSignedIn
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.outline,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isSignedIn ? 'Synced' : 'Offline Mode',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    if (userEmail != null)
+                      Text(
+                        userEmail,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                      ),
+                  ],
+                ),
+              ),
+              if (isSyncing)
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
               children: [
                 Icon(
-                  isSignedIn ? Icons.cloud_done : Icons.cloud_off,
-                  color: isSignedIn ? Colors.green : Colors.grey,
+                  Icons.info_outline,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  'Google Tasks Sync',
-                  style: Theme.of(context).textTheme.titleMedium,
+                Expanded(
+                  child: Text(
+                    syncStatus,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
                 ),
-                const Spacer(),
-                if (isSyncing)
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
               ],
             ),
-            const SizedBox(height: 8),
-            
-            // User info
-            if (isSignedIn && userEmail != null)
-              Text(
-                'Signed in as: $userEmail',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            
-            // Sync status
-            Text(
-              'Status: $syncStatus',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            
-            // Last sync time
-            lastSyncTimeAsync.when(
-              data: (lastSync) {
-                if (lastSync != null) {
-                  final timeAgo = _formatTimeAgo(lastSync);
-                  return Text(
-                    'Last sync: $timeAgo',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  );
-                }
-                return Text(
-                  'Never synced',
-                  style: Theme.of(context).textTheme.bodySmall,
-                );
-              },
-              loading: () => const Text('Loading...'),
-              error: (_, __) => const Text('Error loading sync time'),
-            ),
-            
-            const SizedBox(height: 12),
-            
-            // Sync statistics
-            syncStatsAsync.when(
-              data: (stats) => _buildSyncStats(context, stats),
-              loading: () => const Text('Loading stats...'),
-              error: (_, __) => const Text('Error loading stats'),
-            ),
-            
-            const SizedBox(height: 12),
-            
-            // Action buttons
-            Wrap(
-              spacing: 8,
-              children: [
-                if (!isSignedIn)
-                  ElevatedButton.icon(
-                    onPressed: () => ref.read(taskProvider.notifier).signInWithGoogle(),
-                    icon: const Icon(Icons.login, size: 16),
-                    label: const Text('Sign In'),
-                  ),
-                
-                if (isSignedIn) ...[
-                  ElevatedButton.icon(
-                    onPressed: isSyncing ? null : () => ref.read(taskProvider.notifier).syncWithGoogle(),
-                    icon: const Icon(Icons.sync, size: 16),
-                    label: const Text('Sync'),
-                  ),
-                  
-                  OutlinedButton.icon(
-                    onPressed: isSyncing ? null : () => ref.read(taskProvider.notifier).forceSyncAll(),
-                    icon: const Icon(Icons.sync_alt, size: 16),
-                    label: const Text('Force Sync'),
-                  ),
-                  
-                  OutlinedButton.icon(
-                    onPressed: () => ref.read(taskProvider.notifier).signOutFromGoogle(),
-                    icon: const Icon(Icons.logout, size: 16),
-                    label: const Text('Sign Out'),
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSyncStats(BuildContext context, Map<String, int> stats) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Sync Statistics:',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.bold,
           ),
-        ),
-        const SizedBox(height: 4),
-        Row(
-          children: [
-            _buildStatChip(context, 'Total', stats['total'] ?? 0, Colors.blue),
-            const SizedBox(width: 8),
-            _buildStatChip(context, 'Synced', stats['synced'] ?? 0, Colors.green),
+          if (isSignedIn) ...[
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: isSyncing
+                    ? null
+                    : () => ref.read(taskProvider.notifier).forceSyncAll(),
+                icon: const Icon(Icons.sync, size: 18),
+                label: const Text('Force Sync'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
           ],
-        ),
-        const SizedBox(height: 4),
-        Row(
-          children: [
-            _buildStatChip(context, 'Needs Sync', stats['needsSync'] ?? 0, Colors.orange),
-            const SizedBox(width: 8),
-            _buildStatChip(context, 'Local Only', stats['localOnly'] ?? 0, Colors.grey),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatChip(BuildContext context, String label, int count, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Text(
-        '$label: $count',
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: color,
-          fontWeight: FontWeight.w500,
-        ),
+        ],
       ),
     );
-  }
-
-  String _formatTimeAgo(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inMinutes < 1) {
-      return 'Just now';
-    } else if (difference.inHours < 1) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inDays < 1) {
-      return '${difference.inHours}h ago';
-    } else {
-      return '${difference.inDays}d ago';
-    }
   }
 }

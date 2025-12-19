@@ -60,17 +60,12 @@ class TaskSyncService {
   /// Select the best task from a list of duplicates
   Task _selectBestTaskFromDuplicates(List<Task> duplicates) {
     // Priority order:
-    // 1. Task with Google ID (synced)
-    // 2. Most recently modified
-    // 3. Most recently created
-    // 4. Completed task over incomplete
+    // 1. Most recently modified
+    // 2. Most recently created
+    // 3. Completed task over incomplete
     
     duplicates.sort((a, b) {
-      // Priority 1: Has Google ID (synced task)
-      if (a.googleTaskId != null && b.googleTaskId == null) return -1;
-      if (a.googleTaskId == null && b.googleTaskId != null) return 1;
-      
-      // Priority 2: Most recently modified
+      // Priority 1: Most recently modified
       if (a.lastModified != null && b.lastModified != null) {
         final modifiedComparison = b.lastModified!.compareTo(a.lastModified!);
         if (modifiedComparison != 0) return modifiedComparison;

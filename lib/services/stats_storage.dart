@@ -38,6 +38,31 @@ class StatsStorage {
     return statsList.map((json) => SessionStats.fromJson(json)).toList();
   }
 
+  static Future<void> saveSessionStats(SessionStats statsToWrite) async {
+    try {
+      final stats = await getAllStats();
+      
+      // Remove old entry for this date
+      stats.removeWhere((stat) => 
+        stat.date.year == statsToWrite.date.year && 
+        stat.date.month == statsToWrite.date.month && 
+        stat.date.day == statsToWrite.date.day
+      );
+      
+      // Add updated one
+      stats.add(statsToWrite);
+      
+      // Sort stats by date (newest first)
+      stats.sort((a, b) => b.date.compareTo(a.date));
+      
+      // Save to storage
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_statsKey, json.encode(stats.map((s) => s.toJson()).toList()));
+    } catch (e) {
+      print('Error saving full session stats: $e');
+    }
+  }
+
   static Future<void> saveSession(Duration sessionDuration) async {
     try {
       final stats = await getAllStats();

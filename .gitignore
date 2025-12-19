@@ -113,3 +113,4 @@ installer/
 **/ios/Runner/GeneratedPluginRegistrant.*
 FocusForge-Installer.dmg
 create_dmg.sh
+.env

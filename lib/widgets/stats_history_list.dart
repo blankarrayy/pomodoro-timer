@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../services/stats_storage.dart';
+import '../models/session_stats.dart';
 
 class StatsHistoryList extends ConsumerStatefulWidget {
   const StatsHistoryList({super.key});
@@ -10,7 +12,7 @@ class StatsHistoryList extends ConsumerStatefulWidget {
 }
 
 class _StatsHistoryListState extends ConsumerState<StatsHistoryList> {
-  List<DailyStats> _history = [];
+  List<SessionStats> _history = [];
   bool _isLoading = true;
 
   @override
@@ -21,7 +23,7 @@ class _StatsHistoryListState extends ConsumerState<StatsHistoryList> {
 
   Future<void> _loadHistory() async {
     try {
-      final history = await StatsStorage.getHistory();
+      final history = await StatsStorage.getAllStats();
       if (mounted) {
         setState(() {
           _history = history;
@@ -39,7 +41,10 @@ class _StatsHistoryListState extends ConsumerState<StatsHistoryList> {
   String _formatDuration(int minutes) {
     final hours = minutes ~/ 60;
     final remainingMinutes = minutes % 60;
-    return '${hours}h ${remainingMinutes}m';
+    if (hours > 0) {
+      return '${hours}h ${remainingMinutes}m';
+    }
+    return '${remainingMinutes}m';
   }
 
   @override
@@ -53,7 +58,7 @@ class _StatsHistoryListState extends ConsumerState<StatsHistoryList> {
         child: Text(
           'No history available',
           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
           ),
         ),
       );
@@ -65,7 +70,7 @@ class _StatsHistoryListState extends ConsumerState<StatsHistoryList> {
           children: [
             _buildHistoryItem(
               context,
-              date: stats.date,
+              date: DateFormat.yMMMd().format(stats.date),
               sessions: stats.completedSessions,
               duration: _formatDuration(stats.focusMinutes),
             ),

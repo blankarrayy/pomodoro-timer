@@ -7,6 +7,8 @@ class SettingsService {
   static const String _autoStartBreakKey = 'autoStartBreak';
   static const String _autoStartWorkKey = 'autoStartWork';
   static const String _sessionsUntilLongBreakKey = 'sessionsUntilLongBreak';
+  static const String _focusSoundPathKey = 'focusSoundPath';
+  static const String _breakSoundPathKey = 'breakSoundPath';
 
   static const defaultWorkDuration = 25 * 60;  // 25 minutes
   static const defaultShortBreakDuration = 5 * 60;  // 5 minutes
@@ -24,6 +26,8 @@ class SettingsService {
       'autoStartBreak': prefs.getBool(_autoStartBreakKey) ?? true,
       'autoStartWork': prefs.getBool(_autoStartWorkKey) ?? true,
       'sessionsUntilLongBreak': prefs.getInt(_sessionsUntilLongBreakKey) ?? defaultSessionsUntilLongBreak,
+      'focusSoundPath': prefs.getString(_focusSoundPathKey),
+      'breakSoundPath': prefs.getString(_breakSoundPathKey),
     };
   }
 
@@ -34,6 +38,8 @@ class SettingsService {
     required bool autoStartBreak,
     required bool autoStartWork,
     required int sessionsUntilLongBreak,
+    String? focusSoundPath,
+    String? breakSoundPath,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_workDurationKey, workDuration);
@@ -42,6 +48,8 @@ class SettingsService {
     await prefs.setBool(_autoStartBreakKey, autoStartBreak);
     await prefs.setBool(_autoStartWorkKey, autoStartWork);
     await prefs.setInt(_sessionsUntilLongBreakKey, sessionsUntilLongBreak);
+    if (focusSoundPath != null) await prefs.setString(_focusSoundPathKey, focusSoundPath);
+    if (breakSoundPath != null) await prefs.setString(_breakSoundPathKey, breakSoundPath);
   }
 
   static Future<void> resetToDefaults() async {
@@ -53,5 +61,7 @@ class SettingsService {
     await prefs.setInt(_sessionsUntilLongBreakKey, defaultSessionsUntilLongBreak);
     await prefs.setBool(_autoStartBreakKey, defaultAutoStartBreak);
     await prefs.setBool(_autoStartWorkKey, defaultAutoStartWork);
+    await prefs.remove(_focusSoundPathKey);
+    await prefs.remove(_breakSoundPathKey);
   }
 } 

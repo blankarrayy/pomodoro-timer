@@ -1,15 +1,35 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/task.dart';
 
 class TaskStorage {
   static const String _tasksKey = 'tasks';
+  static const String _versionKey = 'tasks_version';
+  static final Completer<void>? _writeLock = null;
+  static bool _isWriting = false;
 
-  /// Save all tasks to storage
+  /// Save all tasks to storage with atomic write
   static Future<void> saveTasks(List<Task> tasks) async {
-    final prefs = await SharedPreferences.getInstance();
-    final tasksJson = tasks.map((task) => task.toJson()).toList();
-    await prefs.setString(_tasksKey, jsonEncode(tasksJson));
+    // Wait if another write is in progress
+    while (_isWriting) {
+      await Future.delayed(const Duration(milliseconds: 10));
+    }
+
+    _isWriting = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final tasksJson = tasks.map((task) => task.toJson()).toList();
+      
+      // Atomic write: save data
+      await prefs.setString(_tasksKey, jsonEncode(tasksJson));
+      
+      // Increment version for tracking
+      final currentVersion = prefs.getInt(_versionKey) ?? 0;
+      await prefs.setInt(_versionKey, currentVersion + 1);
+    } finally {
+      _isWriting = false;
+    }
   }
 
   /// Load all tasks from storage
@@ -66,26 +86,6 @@ class TaskStorage {
     return tasks.where((task) => task.needsSync && !task.isDeleted).toList();
   }
 
-  /// Get tasks by Google Task ID
-  static Future<Task?> getTaskByGoogleId(String googleTaskId) async {
-    final tasks = await loadTasks();
-    try {
-      return tasks.firstWhere((task) => task.googleTaskId == googleTaskId);
-    } catch (e) {
-      return null;
-    }
-  }
-
-  /// Mark all tasks as synced
-  static Future<void> markAllTasksAsSynced() async {
-    final tasks = await loadTasks();
-    final updatedTasks = tasks.map((task) => task.copyWith(
-      needsSync: false,
-      lastSynced: DateTime.now(),
-    )).toList();
-    await saveTasks(updatedTasks);
-  }
-
   /// Get last sync time
   static Future<DateTime?> getLastSyncTime() async {
     final prefs = await SharedPreferences.getInstance();
@@ -114,9 +114,9 @@ class TaskStorage {
     final tasks = await loadTasks();
     return {
       'total': tasks.length,
-      'synced': tasks.where((task) => task.googleTaskId != null && !task.needsSync).length,
+      'synced': tasks.where((task) => !task.needsSync).length,
       'needsSync': tasks.where((task) => task.needsSync).length,
-      'localOnly': tasks.where((task) => task.googleTaskId == null).length,
+      'localOnly': tasks.length - tasks.where((task) => !task.needsSync).length, // Simplified logic
       'deleted': tasks.where((task) => task.isDeleted).length,
     };
   }

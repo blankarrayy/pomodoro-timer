@@ -1,199 +1,187 @@
 import 'package:flutter/material.dart';
+import 'dart:math';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../ui/app_theme.dart';
 import '../widgets/timer_display.dart';
 import '../widgets/control_buttons.dart';
-import '../widgets/stats_card.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/timer_provider.dart';
 import '../widgets/task_list.dart';
+import '../widgets/stats_card.dart';
+import '../widgets/mode_badge.dart';
 
-class HomeScreen extends ConsumerWidget {
+import 'package:confetti/confetti.dart';
+import '../providers/task_provider.dart';
+
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final timerState = ref.watch(timerServiceProvider);
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
 
-    return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Theme.of(context).colorScheme.primary.withOpacity(0.05),
-              Theme.of(context).colorScheme.secondary.withOpacity(0.03),
-              Theme.of(context).colorScheme.tertiary.withOpacity(0.02),
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Welcome header
-                  _buildWelcomeHeader(context),
-                  const SizedBox(height: 32),
-                  
-                  // Timer section
-                  _buildTimerSection(context),
-                  const SizedBox(height: 32),
-                  
-                  // Quick stats
-                  _buildQuickStats(context, timerState),
-                  const SizedBox(height: 32),
-                  
-                  // Tasks section
-                  _buildTasksSection(context),
-                  const SizedBox(height: 100), // Bottom padding for nav bar
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  late ConfettiController _confettiController;
+  int _previousCompletedCount = 0;
+  int _previousTotalCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _confettiController = ConfettiController(duration: const Duration(seconds: 3));
   }
 
-  Widget _buildWelcomeHeader(BuildContext context) {
-    final hour = DateTime.now().hour;
-    String greeting;
-    IconData greetingIcon;
-    
-    if (hour < 12) {
-      greeting = 'Good Morning';
-      greetingIcon = Icons.wb_sunny;
-    } else if (hour < 17) {
-      greeting = 'Good Afternoon';
-      greetingIcon = Icons.wb_sunny_outlined;
-    } else {
-      greeting = 'Good Evening';
-      greetingIcon = Icons.nights_stay;
-    }
+  @override
+  void dispose() {
+    _confettiController.dispose();
+    super.dispose();
+  }
 
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Theme.of(context).colorScheme.primary.withOpacity(0.1),
-            Theme.of(context).colorScheme.secondary.withOpacity(0.05),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-        ),
-      ),
-      child: Row(
+  @override
+  Widget build(BuildContext context) {
+    // Listen for task completion changes
+    ref.listen(tasksProvider, (previous, next) {
+      final totalTasks = next.length;
+      final completedTasks = next.where((t) => t.isCompleted).length;
+
+      // Check if we just completed the last task
+      if (totalTasks > 0 && 
+          completedTasks == totalTasks && 
+          completedTasks > _previousCompletedCount) {
+        _confettiController.play();
+      }
+
+      _previousTotalCount = totalTasks;
+      _previousCompletedCount = completedTasks;
+    });
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Stack(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              greetingIcon,
-              color: Theme.of(context).colorScheme.primary,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  greeting,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.w600,
+          SafeArea(
+            child: CustomScrollView(
+              physics: const BouncingScrollPhysics(),
+              slivers: [
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: 16),
+                ),
+                // Greeting
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+                    child: _buildGreeting(),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Ready to focus?',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                
+                // Mode Badge (Standard, not sticky)
+                const SliverToBoxAdapter(
+                  child: Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16.0),
+                      child: ModeBadge(),
+                    ),
                   ),
+                ),
+
+                // Timer and Controls
+                SliverToBoxAdapter(
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 16),
+                      const TimerDisplay(),
+                      const SizedBox(height: 24),
+                      const ControlButtons(),
+                      const SizedBox(height: 32),
+                    ],
+                  ),
+                ),
+
+                // Task List (Standard list under controls)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 24.0),
+                    child: TaskList(),
+                  ),
+                ),
+                
+                // Additional padding at bottom for scrollability
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: 100),
                 ),
               ],
             ),
           ),
+          
+          // Confetti Rain Overlay (Multiple emitters for "Rain" effect)
+          if (_confettiController.state == ConfettiControllerState.playing)
+            Positioned(
+              top: -20,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: List.generate(7, (index) {
+                  return ConfettiWidget(
+                    confettiController: _confettiController,
+                    blastDirection: pi / 2, // Down
+                    emissionFrequency: 0.05,
+                    numberOfParticles: 5, // Lighter per-emitter
+                    maxBlastForce: 20,
+                    minBlastForce: 10,
+                    gravity: 0.2, // Floatier
+                    shouldLoop: false,
+                    colors: const [
+                      Colors.green,
+                      Colors.blue,
+                      Colors.pink,
+                      Colors.orange,
+                      Colors.purple,
+                      Colors.cyan,
+                    ],
+                  );
+                }),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildTimerSection(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).shadowColor.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: const Column(
-        children: [
-          TimerDisplay(),
-          SizedBox(height: 24),
-          ControlButtons(),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildQuickStats(BuildContext context, timerState) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).shadowColor.withOpacity(0.08),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: StatsCard(
-        completedSessions: timerState.completedSessions,
-        totalFocusTime: timerState.totalFocusTime.inMinutes,
-      ),
-    );
-  }
 
-  Widget _buildTasksSection(BuildContext context) {
-    return Container(
-      height: 320,
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).shadowColor.withOpacity(0.08),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
+  Widget _buildGreeting() {
+    final hour = DateTime.now().hour;
+    String greeting;
+    if (hour >= 5 && hour < 12) {
+      greeting = 'Good Morning';
+    } else if (hour >= 12 && hour < 17) {
+      greeting = 'Good Afternoon';
+    } else if (hour >= 17 && hour < 21) {
+      greeting = 'Good Evening';
+    } else {
+      greeting = 'Good Night';
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          greeting,
+          style: GoogleFonts.outfit(
+            fontSize: 26, // Reduced size
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
           ),
-        ],
-      ),
-      child: const ClipRRect(
-        borderRadius: BorderRadius.all(Radius.circular(20)),
-        child: TaskList(),
-      ),
+        ),
+        Text(
+          'Ready to focus?',
+          style: GoogleFonts.outfit( // Consistent font
+            fontSize: 14,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+      ],
     );
   }
 }
+

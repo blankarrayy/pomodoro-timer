@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../providers/timer_provider.dart';
+import '../ui/app_theme.dart';
 
 class TimerDisplay extends ConsumerWidget {
   const TimerDisplay({super.key});
@@ -8,105 +10,80 @@ class TimerDisplay extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final timerState = ref.watch(timerServiceProvider);
-    final timerService = ref.read(timerServiceProvider.notifier);
-
-    String getModeText() {
-      if (timerState.isBreak) {
-        return timerState.isLongBreak ? 'Long Break' : 'Short Break';
-      }
-      return 'Focus Mode';
-    }
-
-    IconData getModeIcon() {
-      if (timerState.isBreak) {
-        return timerState.isLongBreak ? Icons.weekend : Icons.coffee;
-      }
-      return Icons.timer;
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).shadowColor.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+    
+    return GestureDetector(
+      onHorizontalDragEnd: (details) {
+        if (details.primaryVelocity! < 0) {
+          // Swipe Left -> Next Mode
+          ref.read(timerServiceProvider.notifier).nextMode();
+        } else if (details.primaryVelocity! > 0) {
+          // Swipe Right -> Previous Mode
+          ref.read(timerServiceProvider.notifier).previousMode();
+        }
+      },
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          
+          // Timer Text with Glow
+          Stack(
             children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_ios, size: 16),
-                onPressed: () => timerService.previousMode(),
-                style: IconButton.styleFrom(
-                  padding: const EdgeInsets.all(8),
-                  backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(getModeIcon(), size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    getModeText(),
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 16),
-              IconButton(
-                icon: const Icon(Icons.arrow_forward_ios, size: 16),
-                onPressed: () => timerService.nextMode(),
-                style: IconButton.styleFrom(
-                  padding: const EdgeInsets.all(8),
-                  backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+              // Glow effect
               Text(
                 '${timerState.minutes}:${timerState.seconds.toString().padLeft(2, '0')}',
-                style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurface,
-                  fontWeight: FontWeight.w300,
-                  letterSpacing: -2,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 100,
+                  fontWeight: FontWeight.bold,
+                  height: 1,
+                  foreground: Paint()
+                    ..style = PaintingStyle.stroke
+                    ..strokeWidth = 4
+                    ..color = _getModeColor(timerState).withOpacity(0.1),
+                ),
+              ),
+              // Actual Text
+              Text(
+                '${timerState.minutes}:${timerState.seconds.toString().padLeft(2, '0')}',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 100,
+                  fontWeight: FontWeight.bold,
+                  height: 1,
+                  color: AppTheme.textPrimary,
+                  shadows: [
+                    Shadow(
+                      color: _getModeColor(timerState).withOpacity(0.5),
+                      blurRadius: 30,
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          if (timerState.isRunning && timerState.isBreak) ...[
-            const SizedBox(height: 16),
-            LinearProgressIndicator(
-              value: timerState.progress,
-              backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-              valueColor: AlwaysStoppedAnimation<Color>(
-                Theme.of(context).colorScheme.primary
+          
+          const SizedBox(height: 40),
+          
+          // Progress Bar
+          SizedBox(
+            width: 200,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: timerState.progress,
+                minHeight: 6,
+                backgroundColor: AppTheme.surfaceLight,
+                valueColor: AlwaysStoppedAnimation<Color>(_getModeColor(timerState)),
               ),
             ),
-          ],
+          ),
         ],
       ),
     );
   }
-} 
+
+  Color _getModeColor(dynamic timerState) {
+    if (timerState.isBreak) {
+      return AppTheme.tertiary; // Cyan/Blue for break
+    }
+    return AppTheme.primary; // Indigo for focus
+  }
+}

@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'dart:ui';
 import '../widgets/settings_form.dart';
+import '../ui/app_theme.dart';
+import 'credits_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -8,115 +12,67 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Theme.of(context).colorScheme.primary.withOpacity(0.05),
-              Theme.of(context).colorScheme.secondary.withOpacity(0.03),
-              Theme.of(context).colorScheme.tertiary.withOpacity(0.02),
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header section
-                  _buildHeader(context),
-                  const SizedBox(height: 32),
-                  
-                  // Settings content
-                  _buildSettingsContent(context),
-                  const SizedBox(height: 100), // Bottom padding for nav bar
-                ],
+      backgroundColor: Colors.transparent,
+      body: SafeArea(
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(),
+          slivers: [
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
+            
+            // Breathable Header
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                         Text(
+                          'Settings',
+                          style: GoogleFonts.outfit(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          'Customize your focus experience',
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const CreditsScreen()),
+                        );
+                      },
+                      icon: Icon(Icons.info_outline_rounded, color: AppTheme.textSecondary.withOpacity(0.7), size: 24),
+                      tooltip: 'Credits',
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ),
-      ),
-    );
-  }
 
-  Widget _buildHeader(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Theme.of(context).colorScheme.primary.withOpacity(0.1),
-            Theme.of(context).colorScheme.secondary.withOpacity(0.05),
+            // Settings Form acts as the scrollable content
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: const SettingsForm(),
+              ),
+            ),
+            
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
           ],
         ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-        ),
       ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              Icons.settings,
-              color: Theme.of(context).colorScheme.primary,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Settings',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Customize your focus experience',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettingsContent(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).shadowColor.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: const SettingsForm(),
     );
   }
 }

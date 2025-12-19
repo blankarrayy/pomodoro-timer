@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../providers/timer_provider.dart';
-import 't_button.dart';
+import '../ui/app_theme.dart';
 
 class ControlButtons extends ConsumerWidget {
   const ControlButtons({super.key});
@@ -14,31 +15,70 @@ class ControlButtons extends ConsumerWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        TButton(
-          width: 120,
-          isOutlined: true,
-          onPressed: timerService.resetTimer,
-          child: const Text('Reset'),
+        _buildButton(
+          context: context,
+          icon: Icons.refresh_rounded,
+          onPressed: () => timerService.resetTimer(),
+          isSecondary: true,
         ),
-        const SizedBox(width: 16),
-        TButton(
-          width: 120,
-          onPressed: timerState.isRunning
-              ? timerService.pauseTimer
-              : timerService.startTimer,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                timerState.isRunning ? Icons.pause : Icons.play_arrow,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(timerState.isRunning ? 'Pause' : 'Start'),
-            ],
-          ),
+        const SizedBox(width: 24),
+        _buildButton(
+          context: context,
+          icon: timerState.isRunning ? Icons.pause_rounded : Icons.play_arrow_rounded,
+          onPressed: () => timerService.toggleTimer(),
+          isPrimary: true,
+          size: 72,
+          iconSize: 32,
+        ),
+        const SizedBox(width: 24),
+        _buildButton(
+          context: context,
+          icon: Icons.skip_next_rounded,
+          onPressed: () => timerService.nextMode(),
+          isSecondary: true,
         ),
       ],
     );
   }
-} 
+
+  Widget _buildButton({
+    required BuildContext context,
+    required IconData icon,
+    required VoidCallback onPressed,
+    bool isPrimary = false,
+    bool isSecondary = false,
+    double size = 56,
+    double iconSize = 24,
+  }) {
+    final color = isPrimary ? AppTheme.primary : AppTheme.textPrimary;
+    final backgroundColor = isPrimary 
+      ? AppTheme.primary 
+      : AppTheme.surfaceLight.withOpacity(0.5);
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: backgroundColor,
+          foregroundColor: color,
+          padding: EdgeInsets.zero,
+          elevation: isPrimary ? 8 : 0,
+          shadowColor: isPrimary ? AppTheme.primary.withOpacity(0.4) : Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: isSecondary 
+              ? BorderSide(color: Colors.white.withOpacity(0.1)) 
+              : BorderSide.none,
+          ),
+        ),
+        child: Icon(
+          icon, 
+          size: iconSize,
+          color: isPrimary ? Colors.white : AppTheme.textSecondary,
+        ),
+      ),
+    );
+  }
+}

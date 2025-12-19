@@ -8,7 +8,6 @@ class Task {
   final DateTime? dueDate;
   final DateTime? completedAt;
   final String? notes;
-  final String? googleTaskId;
   final DateTime? lastSynced;
   final DateTime? lastModified;
   final bool isDeleted;
@@ -22,7 +21,6 @@ class Task {
     this.dueDate,
     this.completedAt,
     this.notes,
-    this.googleTaskId,
     this.lastSynced,
     this.lastModified,
     this.isDeleted = false,
@@ -39,7 +37,6 @@ class Task {
     DateTime? dueDate,
     DateTime? completedAt,
     String? notes,
-    String? googleTaskId,
     DateTime? lastSynced,
     DateTime? lastModified,
     bool? isDeleted,
@@ -53,7 +50,6 @@ class Task {
       dueDate: dueDate ?? this.dueDate,
       completedAt: completedAt ?? this.completedAt,
       notes: notes ?? this.notes,
-      googleTaskId: googleTaskId ?? this.googleTaskId,
       lastSynced: lastSynced ?? this.lastSynced,
       lastModified: lastModified ?? this.lastModified,
       isDeleted: isDeleted ?? this.isDeleted,
@@ -64,31 +60,45 @@ class Task {
   Map<String, dynamic> toJson() => {
     'id': id,
     'title': title,
-    'isCompleted': isCompleted,
-    'createdAt': createdAt.toIso8601String(),
-    'dueDate': dueDate?.toIso8601String(),
-    'completedAt': completedAt?.toIso8601String(),
+    'is_completed': isCompleted,
+    'created_at': createdAt.toIso8601String(),
+    'due_date': dueDate?.toIso8601String(),
+    'completed_at': completedAt?.toIso8601String(),
     'notes': notes,
-    'googleTaskId': googleTaskId,
-    'lastSynced': lastSynced?.toIso8601String(),
-    'lastModified': lastModified?.toIso8601String(),
-    'isDeleted': isDeleted,
-    'needsSync': needsSync,
+    'last_synced': lastSynced?.toIso8601String(),
+    'last_modified': lastModified?.toIso8601String(),
+    'is_deleted': isDeleted,
+    'needs_sync': needsSync,
   };
 
   factory Task.fromJson(Map<String, dynamic> json) => Task(
     id: json['id'],
     title: json['title'],
-    isCompleted: json['isCompleted'] ?? false,
-    createdAt: DateTime.parse(json['createdAt']),
-    dueDate: json['dueDate'] != null ? DateTime.parse(json['dueDate']) : null,
-    completedAt: json['completedAt'] != null ? DateTime.parse(json['completedAt']) : null,
+    // Support both snake_case (remote) and camelCase (legacy local) if needed, 
+    // or just migrate. For now, let's prefer snake_case but fallback could be wise if local storage is mixed.
+    // However, clean migration is safer. Let's stick to snake_case for the future.
+    // WAIT: Local storage JSON might still be camelCase! 
+    // If I change this, I break local storage loading for existing tasks!
+    // I must handle both or migrate local storage.
+    // Strategy: Update toJson to snake_case (for new saves/sync). 
+    // Update fromJson to check BOTH.
+    isCompleted: json['is_completed'] ?? json['isCompleted'] ?? false,
+    createdAt: DateTime.parse(json['created_at'] ?? json['createdAt']),
+    dueDate: (json['due_date'] ?? json['dueDate']) != null 
+        ? DateTime.parse(json['due_date'] ?? json['dueDate']) 
+        : null,
+    completedAt: (json['completed_at'] ?? json['completedAt']) != null 
+        ? DateTime.parse(json['completed_at'] ?? json['completedAt']) 
+        : null,
     notes: json['notes'],
-    googleTaskId: json['googleTaskId'],
-    lastSynced: json['lastSynced'] != null ? DateTime.parse(json['lastSynced']) : null,
-    lastModified: json['lastModified'] != null ? DateTime.parse(json['lastModified']) : null,
-    isDeleted: json['isDeleted'] ?? false,
-    needsSync: json['needsSync'] ?? true,
+    lastSynced: (json['last_synced'] ?? json['lastSynced']) != null 
+        ? DateTime.parse(json['last_synced'] ?? json['lastSynced']) 
+        : null,
+    lastModified: (json['last_modified'] ?? json['lastModified']) != null 
+        ? DateTime.parse(json['last_modified'] ?? json['lastModified']) 
+        : null,
+    isDeleted: json['is_deleted'] ?? json['isDeleted'] ?? false,
+    needsSync: json['needs_sync'] ?? json['needsSync'] ?? true,
   );
 
   /// Generate a content hash for this task (for deduplication)
