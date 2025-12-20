@@ -13,45 +13,58 @@ class TaskSyncService {
     List<Task> localTasks,
     List<Task> remoteTasks,
   ) {
-    final Map<String, Task> mergedTasksMap = {};
-    final Set<String> processedContentHashes = {};
+    // 1. First, merge by ID to handle updates to existing tasks
+    // This solves the issue where changing a task (e.g. completing it) changes its content hash
+    // and causes it to be treated as a different task during sync.
+    final Map<String, List<Task>> tasksById = {};
+    
+    for (final task in localTasks) {
+      tasksById.putIfAbsent(task.id, () => []).add(task);
+    }
+    for (final task in remoteTasks) {
+      tasksById.putIfAbsent(task.id, () => []).add(task);
+    }
 
-    // First, process all tasks and group by content hash to detect duplicates
+    final List<Task> uniqueIdTasks = [];
+    
+    // Resolve conflicts for the same ID
+    for (final taskId in tasksById.keys) {
+      final tasks = tasksById[taskId]!;
+      if (tasks.length == 1) {
+        uniqueIdTasks.add(tasks.first);
+      } else {
+        // ID conflict: use the latest version logic
+        uniqueIdTasks.add(_selectBestTaskFromDuplicates(tasks));
+      }
+    }
+
+    // 2. Now perform content deduplication to catch duplicates with DIFFERENT IDs
+    // (e.g. created on two devices offline)
+    final Map<String, Task> mergedTasksMap = {};
     final Map<String, List<Task>> tasksByContent = {};
     
-    // Group local tasks by content
-    for (final task in localTasks) {
-      if (!task.isDeleted) {
+    // Add deleted tasks directly to result (they don't need content deduplication)
+    // Add active tasks to content grouping
+    for (final task in uniqueIdTasks) {
+      if (task.isDeleted) {
+        mergedTasksMap[task.id] = task;
+      } else {
         final contentHash = task.contentHash;
         tasksByContent.putIfAbsent(contentHash, () => []).add(task);
       }
     }
 
-    // Group remote tasks by content
-    for (final task in remoteTasks) {
-      if (!task.isDeleted) {
-        final contentHash = task.contentHash;
-        tasksByContent.putIfAbsent(contentHash, () => []).add(task);
-      }
-    }
-
-    // Process each content group
     for (final contentHash in tasksByContent.keys) {
       final tasksWithSameContent = tasksByContent[contentHash]!;
       
       if (tasksWithSameContent.length == 1) {
-        // No duplicates, add the task as-is
         final task = tasksWithSameContent.first;
         mergedTasksMap[task.id] = task;
       } else {
-        // Handle duplicates by selecting the best version
         final bestTask = _selectBestTaskFromDuplicates(tasksWithSameContent);
         mergedTasksMap[bestTask.id] = bestTask;
-        
         debugPrint('Deduplication: Found ${tasksWithSameContent.length} duplicates for "${bestTask.title}", selected task with ID: ${bestTask.id}');
       }
-      
-      processedContentHashes.add(contentHash);
     }
 
     return mergedTasksMap.values.toList();

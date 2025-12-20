@@ -51,10 +51,8 @@ class SyncStatusWidget extends ConsumerWidget {
                   ],
                 ),
                 child: Icon(
-                  isSignedIn ? Icons.cloud_done : Icons.cloud_off_outlined,
-                  color: isSignedIn
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.outline,
+                  _getSyncIcon(isSignedIn, syncStatus),
+                  color: _getSyncColor(context, isSignedIn, syncStatus),
                 ),
               ),
               const SizedBox(width: 16),
@@ -63,7 +61,7 @@ class SyncStatusWidget extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isSignedIn ? 'Synced' : 'Offline Mode',
+                      _getSyncTitle(isSignedIn, syncStatus),
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w600,
                           ),
@@ -139,5 +137,28 @@ class SyncStatusWidget extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  IconData _getSyncIcon(bool isSignedIn, String status) {
+    if (!isSignedIn) return Icons.cloud_off_outlined;
+    if (status.toLowerCase().contains('incomplete') || status.toLowerCase().contains('failed')) {
+      return Icons.cloud_upload_outlined;
+    }
+    return Icons.cloud_done;
+  }
+
+  Color _getSyncColor(BuildContext context, bool isSignedIn, String status) {
+    if (!isSignedIn) return Theme.of(context).colorScheme.outline;
+    if (status.toLowerCase().contains('incomplete') || status.toLowerCase().contains('failed')) {
+      return Colors.orange;
+    }
+    return Theme.of(context).colorScheme.primary;
+  }
+
+  String _getSyncTitle(bool isSignedIn, String status) {
+    if (!isSignedIn) return 'Offline Mode';
+    if (status.toLowerCase().contains('incomplete')) return 'Sync Incomplete';
+    if (status.toLowerCase().contains('failed')) return 'Sync Failed';
+    return 'Synced';
   }
 }

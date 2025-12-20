@@ -1,13 +1,15 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:internet_connection_checker/internet_connection_checker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart';
 import '../models/task.dart';
 import 'task_storage.dart';
 import 'stats_storage.dart';
 import 'supabase_task_repository.dart';
 import 'supabase_analytics_repository.dart';
+import 'task_sync_service.dart';
+import 'supabase_auth_service.dart';
 
 class SyncOrchestrator {
   static final SyncOrchestrator _instance = SyncOrchestrator._internal();
@@ -15,6 +17,7 @@ class SyncOrchestrator {
   SyncOrchestrator._internal();
 
   final SupabaseTaskRepository _remoteRepo = SupabaseTaskRepository();
+  final SupabaseAuthService _authService = SupabaseAuthService();
   bool _isSyncing = false;
   StreamSubscription? _authSubscription;
   Timer? _syncDebounceTimer;
@@ -71,85 +74,125 @@ class SyncOrchestrator {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return; // Not signed in, local only mode
 
-    // Check connectivity (simple check)
-    // Note: Use a package or Supabase's realtime status in production
-    // For now assume we might have connection
-    
     _isSyncing = true;
     try {
       debugPrint('Starting Sync...');
       
-      // 1. Upload Local Tasks (One-way migration/sync for now)
-      var localTasks = await TaskStorage.loadTasks();
-      final List<String> tasksToRemoveLocally = [];
-      
-      for (final task in localTasks) {
-        // Handle Pending Deletion (Hard Delete)
-        if (task.isDeleted) {
-           debugPrint('Hard deleting task: ${task.title} (${task.id})');
-           try {
-             await _remoteRepo.deleteTask(task.id);
-             tasksToRemoveLocally.add(task.id);
-           } catch (e) {
-             debugPrint('Failed to delete remote task: $e');
-             // If failed, we keep it locally to try again next time
-           }
-           continue; 
-        }
-
-        // Generate Hash
-        final hash = '${task.title}_${task.dueDate?.toIso8601String() ?? 'nodate'}';
-        
-        // Check if exists remotely
-        final existing = await _remoteRepo.findTaskByHash(hash);
-        
-        if (existing == null) {
-          // Does not exist, create it
-          debugPrint('Uploading task: ${task.title}');
-          await _remoteRepo.createTask(task);
-        } else {
-          debugPrint('Task exists, updating: ${task.title}');
-          // Update remote with local state
-          await _remoteRepo.updateTask(task);
-        }
-      }
-      
-      // Perform local cleanup of hard-deleted tasks
-      if (tasksToRemoveLocally.isNotEmpty) {
-        localTasks.removeWhere((t) => tasksToRemoveLocally.contains(t.id));
-        await TaskStorage.saveTasks(localTasks);
-        debugPrint('Permanently removed ${tasksToRemoveLocally.length} tasks locally.');
-      }
-      
-      // 2. Sync Analytics (Two-Way)
-      debugPrint('Syncing Analytics...');
-      final allStats = await StatsStorage.getAllStats();
-      final analyticsRepo = SupabaseAnalyticsRepository();
-      
-      // Sync last 30 days only to be efficient
-      final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
-      final recentStats = allStats.where((s) => s.date.isAfter(thirtyDaysAgo)).toList();
-
-      // A. Upload Local
-      for (final stat in recentStats) {
-        await analyticsRepo.syncDailyStats(stat);
-      }
-
-      // B. Download & Merge Remote
-      // We check the last 7 days specifically to update the chart immediately
-      for (int i = 0; i < 7; i++) {
-        final date = DateTime.now().subtract(Duration(days: i));
-        final remoteStat = await analyticsRepo.fetchDailyStats(date);
-        
-        // Save the authoritative remote state to local
-        await StatsStorage.saveSessionStats(remoteStat);
-      }
-
-      // 3. Download & Merge updates from Server
+      // 1. Fetch Remote & Local Tasks
       final remoteTasks = await _remoteRepo.getTasks();
-      debugPrint('Fetched ${remoteTasks.length} tasks from server.');
+      final localTasks = await TaskStorage.loadTasks();
       
-      await _mergeRemoteTasks(remoteTasks);
+      debugPrint('Sync: Fetched ${remoteTasks.length} remote and ${localTasks.length} local tasks');
+
+      // ----------------------------------------------------------------------
+      // PHASE 1: Process Local Deletions (Tombstones)
+      // ----------------------------------------------------------------------
+      // If we have a local task marked isDeleted, we MUST delete it on server (Hard Delete)
+      // and then remove it locally.
+      final tasksToDelete = localTasks.where((t) => t.isDeleted).toList();
+      for (final task in tasksToDelete) {
+        debugPrint('🗑️ Processing local deletion for "${task.title}"');
+        await _remoteRepo.deleteTask(task.id);
+        localTasks.removeWhere((t) => t.id == task.id); // Remove from memory
+      }
+      
+      if (tasksToDelete.isNotEmpty) {
+         // Save intermediate state to prevent resurrections if crash happens
+         await TaskStorage.saveTasks(localTasks); 
+         debugPrint('Sync: Processed & removed ${tasksToDelete.length} local deletions');
+      }
+
+      // ----------------------------------------------------------------------
+      // PHASE 2: Inferential Deletion (Server -> Local)
+      // ----------------------------------------------------------------------
+      // If a task is known to be synced (lastSynced != null) but is missing from
+      // the fresh remote list, it means it was deleted on another device.
+      // We must Hard Delete it locally.
+      
+      // Refresh remote tasks to be sure (in case Phase 1 affected query, though unlikely)
+      // Actually we can use the list from step 1 for inference check if we haven't touched it.
+      // But let's rely on the initial fetch 'remoteTasks'.
+      
+      final remoteIds = remoteTasks.map((t) => t.id).toSet();
+      final inferredDeletions = <Task>[];
+      
+      localTasks.removeWhere((task) {
+        // Only infer deletion for tasks that we KNOW were on the server before
+        final wasSynced = task.lastSynced != null;
+        final isMissingRemote = !remoteIds.contains(task.id);
+        
+        if (wasSynced && isMissingRemote) {
+          debugPrint('🗑️ Inferential Delete: "${task.title}" missing from server, deleting locally.');
+          inferredDeletions.add(task);
+          return true; // Remove from list
+        }
+        return false;
+      });
+      
+      if (inferredDeletions.isNotEmpty) {
+        await TaskStorage.saveTasks(localTasks);
+        debugPrint('Sync: Inferred & removed ${inferredDeletions.length} external deletions');
+      }
+
+      // ----------------------------------------------------------------------
+      // PHASE 3: Push Local Updates / Creates
+      // ----------------------------------------------------------------------
+      int created = 0, updated = 0;
+      
+      for (final localTask in localTasks) {
+        final remoteVersion = remoteTasks.firstWhere(
+          (t) => t.id == localTask.id, 
+          orElse: () => Task(id: 'missing', title: '', isDeleted: true)
+        );
+        
+        if (remoteVersion.id == 'missing') {
+          // New to remote (Create)
+          debugPrint('📤 Creating task "${localTask.title}"');
+          await _remoteRepo.createTask(localTask);
+          created++;
+        } else {
+          // Exists remotely, check timestamp
+          final remoteTime = remoteVersion.lastModified ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final localTime = localTask.lastModified ?? DateTime.fromMillisecondsSinceEpoch(0);
+          
+          debugPrint('🔍 Task "${localTask.title}": Local=${localTime.toIso8601String()}, Remote=${remoteTime.toIso8601String()}');
+          
+          if (localTime.isAfter(remoteTime)) {
+             debugPrint('📤 Updating task "${localTask.title}" (newer locally)');
+             await _remoteRepo.updateTask(localTask);
+             updated++;
+          } else if (localTime == remoteTime) {
+             debugPrint('⏸️  Skipping task "${localTask.title}" (same timestamp)');
+          } else {
+             debugPrint('⏸️  Skipping task "${localTask.title}" (remote is newer)');
+          }
+        }
+      }
+      
+      debugPrint('Sync: Pushed - Created: $created, Updated: $updated');
+
+      // ----------------------------------------------------------------------
+      // PHASE 4: Merge & Save
+      // ----------------------------------------------------------------------
+      // Fetch fresh remote state to include our pushes + any other device changes
+      final freshRemoteTasks = await _remoteRepo.getTasks();
+      
+      final mergedTasks = TaskSyncService().mergeTasksWithDeduplication(localTasks, freshRemoteTasks);
+      
+      // Update lastSynced for all tasks (since we just synced)
+      final now = DateTime.now().toUtc();
+      final finalTasks = mergedTasks.map((t) => t.copyWith(
+        lastSynced: now, // Mark as known-synced
+        needsSync: false
+      )).toList();
+      
+      await TaskStorage.saveTasks(finalTasks);
+      debugPrint('Sync: Completed. Final task count: ${finalTasks.length}');
+      
+      // ----------------------------------------------------------------------
+
+      // 5. Sync Analytics (Two-Way) - Keeping existing logic
+      await _syncAnalytics();
       
       // Reset retry count on successful sync
       _retryCount = 0;
@@ -158,58 +201,122 @@ class SyncOrchestrator {
     } catch (e) {
       debugPrint('Sync Error: $e');
       
-      // Retry logic with exponential backoff
       if (_retryCount < _maxRetries) {
         _retryCount++;
-        final retryDelay = Duration(seconds: 2 * _retryCount); // 2s, 4s, 8s
+        final retryDelay = Duration(seconds: 2 * _retryCount);
         debugPrint('Retrying sync in ${retryDelay.inSeconds}s (attempt $_retryCount/$_maxRetries)');
-        
         Timer(retryDelay, () => syncNow());
       } else {
         debugPrint('Max retries reached. Sync failed permanently.');
-        _retryCount = 0; // Reset for next sync attempt
+        _retryCount = 0;
       }
     } finally {
       _isSyncing = false;
     }
   }
 
-  Future<void> _mergeRemoteTasks(List<Task> remoteTasks) async {
-    final localTasks = await TaskStorage.loadTasks();
-    final localTaskMap = {for (var t in localTasks) t.id: t};
-    bool hasChanges = false;
+  Future<void> _syncAnalytics() async {
+    try {
+      debugPrint('Syncing Analytics...');
+      final allStats = await StatsStorage.getAllStats();
+      final analyticsRepo = SupabaseAnalyticsRepository();
+      
+      final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
+      final recentStats = allStats.where((s) => s.date.isAfter(thirtyDaysAgo)).toList();
 
-    for (final remoteTask in remoteTasks) {
-      final localTask = localTaskMap[remoteTask.id];
+      // Upload Local
+      for (final stat in recentStats) {
+        await analyticsRepo.syncDailyStats(stat);
+      }
 
-      if (localTask == null) {
-        // New task from server
-        // Ensure we don't re-add a task we definitely deleted locally if we were tracking deletions separately.
-        // But since we use soft-deletes (isDeleted), if the remote task is isDeleted=false and we don't have it,
-        // it likely means it's a new task or we hard-deleted it.
-        // Given the current simple architecture, we'll accept it.
-        localTasks.add(remoteTask);
-        hasChanges = true;
+      // Download & Merge Remote
+      for (int i = 0; i < 7; i++) {
+        final date = DateTime.now().subtract(Duration(days: i));
+        final remoteStat = await analyticsRepo.fetchDailyStats(date);
+        await StatsStorage.saveSessionStats(remoteStat);
+      }
+    } catch (e) {
+      debugPrint('Analytics Sync Error: $e');
+    }
+  }
+
+
+
+  // Sync a single task by ID
+  Future<void> syncTask(String taskId) async {
+    try {
+      if (!_authService.isSignedIn) return;
+
+      // 1. Get Local Task
+      final localTasks = await TaskStorage.loadTasks();
+      final localTaskIndex = localTasks.indexWhere((t) => t.id == taskId);
+      if (localTaskIndex == -1) return; // Task not found locally
+      final localTask = localTasks[localTaskIndex];
+
+      // 2. Fetch Remote Task
+      final remoteTask = await _remoteRepo.getTask(taskId);
+
+      debugPrint('Syncing single task "${localTask.title}"...');
+
+      // 3. Compare and Push/Update
+      if (remoteTask == null) {
+        // Needs creation on remote
+        debugPrint('📤 Single Sync: Creating remote task');
+        await _remoteRepo.createTask(localTask);
       } else {
-        // Conflict resolution: Last Write Wins
-        // If remote is newer than local, update local
+        // Compare timestamps
         final remoteTime = remoteTask.lastModified ?? DateTime.fromMillisecondsSinceEpoch(0);
         final localTime = localTask.lastModified ?? DateTime.fromMillisecondsSinceEpoch(0);
+        
+        debugPrint('🔍 Single Sync: Local=${localTime.toIso8601String()}, Remote=${remoteTime.toIso8601String()}');
 
-        if (remoteTime.isAfter(localTime)) {
-          debugPrint('Updating local task ${remoteTask.title} from remote');
-          localTasks[localTasks.indexOf(localTask)] = remoteTask;
-          hasChanges = true;
+        if (localTime.isAfter(remoteTime)) {
+           debugPrint('📤 Single Sync: Pushing local update');
+           await _remoteRepo.updateTask(localTask);
+        } else if (remoteTime.isAfter(localTime)) {
+           debugPrint('📥 Single Sync: Pulling remote update');
+           // Update local storage
+           localTasks[localTaskIndex] = remoteTask;
+           await TaskStorage.saveTasks(localTasks);
+        } else {
+           debugPrint('✅ Single Sync: Already in sync');
         }
       }
+    } catch (e) {
+      debugPrint('Error syncing single task: $e');
+    }
+  }
+
+  // Get sync info for a task (Source: Cloud/Local)
+  Future<Map<String, dynamic>> getTaskSyncInfo(String taskId) async {
+    if (!_authService.isSignedIn) {
+      return {'status': 'Local Only', 'details': 'Not signed in', 'icon': Icons.cloud_off};
     }
 
-    if (hasChanges) {
-      await TaskStorage.saveTasks(localTasks);
+    try {
+      final remoteTask = await _remoteRepo.getTask(taskId);
+      if (remoteTask != null) {
+        final lastMod = remoteTask.lastModified != null 
+            ? DateFormat('MMM d, h:mm a').format(remoteTask.lastModified!.toLocal())
+            : 'Unknown';
+        return {
+          'status': 'Synced',
+          'details': 'Available on Cloud\nLast Cloud Update: $lastMod',
+          'icon': Icons.cloud_done,
+          'isSynced': true
+        };
+      } else {
+         return {
+          'status': 'Local Only',
+          'details': 'Not yet synced to cloud',
+          'icon': Icons.cloud_upload_outlined,
+          'isSynced': false
+        };
+      }
+    } catch (e) {
+      return {'status': 'Error', 'details': 'Could not check status', 'icon': Icons.error_outline};
     }
-  
-    }
-
+  }
 
   void dispose() {
     _authSubscription?.cancel();

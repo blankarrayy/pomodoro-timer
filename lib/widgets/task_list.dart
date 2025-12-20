@@ -315,6 +315,12 @@ class _TaskFormSheetState extends State<_TaskFormSheet> {
                 ),
               ),
               const Spacer(),
+              if (widget.task != null)
+                IconButton(
+                  onPressed: () => _showSyncInfo(context),
+                  icon: const Icon(Icons.info_outline_rounded, color: AppTheme.textSecondary),
+                  tooltip: 'Sync Info',
+                ),
               IconButton(
                 onPressed: () => Navigator.pop(context),
                 icon: const Icon(Icons.close_rounded, color: AppTheme.textSecondary),
@@ -464,6 +470,97 @@ class _TaskFormSheetState extends State<_TaskFormSheet> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _showSyncInfo(BuildContext context) async {
+    // Show loading dialog initially
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final notifier = widget.ref.read(taskProvider.notifier);
+      final info = await notifier.getTaskSyncInfo(widget.task!.id);
+      
+      if (!context.mounted) return;
+      Navigator.pop(context); // Close loading
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: AppTheme.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(info['icon'] as IconData, color: AppTheme.primary),
+              const SizedBox(width: 8),
+              Text('Sync Info', style: GoogleFonts.outfit(color: AppTheme.textPrimary)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildInfoRow('Source:', info['status']),
+              const SizedBox(height: 8),
+              _buildInfoRow('Details:', info['details']),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Close', style: GoogleFonts.outfit(color: AppTheme.textSecondary)),
+            ),
+            if (info['status'] != 'Error')
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(context); // Close info dialog
+                  // Show syncing indicator
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Syncing task...'), duration: Duration(seconds: 1)),
+                  );
+                  
+                  await notifier.syncSingleTask(widget.task!.id);
+                  
+                  if (context.mounted) {
+                     ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Task synced successfully!')),
+                    );
+                  }
+                },
+                child: Text('Sync Now', style: GoogleFonts.outfit(color: AppTheme.primary, fontWeight: FontWeight.bold)),
+              ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (context.mounted) Navigator.pop(context); // Close loading
+    }
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.outfit(
+            color: AppTheme.textSecondary.withOpacity(0.7),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.outfit(
+            color: AppTheme.textPrimary,
+            fontSize: 14,
+          ),
+        ),
+      ],
     );
   }
 }

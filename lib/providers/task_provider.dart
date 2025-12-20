@@ -121,10 +121,21 @@ class TaskNotifier extends Notifier<TaskState> {
       ref.invalidate(todayStatsProvider);
       ref.invalidate(statsProvider);
       
-      state = state.copyWith(
-        isSyncing: false,
-        syncStatus: 'Synced at ${DateTime.now().toString().substring(11, 16)}',
-      );
+      
+      // Check if any tasks still need sync
+      final pendingTasks = await TaskStorage.getTasksNeedingSync();
+      
+      if (pendingTasks.isEmpty) {
+        state = state.copyWith(
+          isSyncing: false,
+          syncStatus: 'Synced at ${DateTime.now().toString().substring(11, 16)}',
+        );
+      } else {
+        state = state.copyWith(
+          isSyncing: false,
+          syncStatus: 'Sync incomplete (${pendingTasks.length} pending)',
+        );
+      }
     } catch (e) {
       debugPrint('Error syncing: $e');
       state = state.copyWith(
@@ -165,8 +176,8 @@ class TaskNotifier extends Notifier<TaskState> {
     final task = state.tasks[taskIndex];
     final updatedTask = task.copyWith(
       isCompleted: !task.isCompleted,
-      completedAt: !task.isCompleted ? DateTime.now() : null,
-      lastModified: DateTime.now(),
+      completedAt: !task.isCompleted ? DateTime.now().toUtc() : null,
+      lastModified: DateTime.now().toUtc(),
       needsSync: true,
     );
     
@@ -182,7 +193,7 @@ class TaskNotifier extends Notifier<TaskState> {
       title: title ?? originalTask.title,
       notes: notes ?? originalTask.notes,
       dueDate: dueDate ?? originalTask.dueDate,
-      lastModified: DateTime.now(),
+      lastModified: DateTime.now().toUtc(),
       needsSync: true,
     );
 
@@ -193,16 +204,23 @@ class TaskNotifier extends Notifier<TaskState> {
     final taskIndex = state.tasks.indexWhere((t) => t.id == taskId);
     if (taskIndex == -1) return;
     
-    // 1. Remove locally immediately
+    // 1. Soft delete locally
+    final task = state.tasks[taskIndex];
+    final updatedTask = task.copyWith(
+      isDeleted: true,
+      lastModified: DateTime.now().toUtc(),
+      needsSync: true,
+    );
+    
     final newTasks = [...state.tasks];
-    newTasks.removeAt(taskIndex);
+    newTasks[taskIndex] = updatedTask;
     
     state = state.copyWith(tasks: newTasks);
     await TaskStorage.saveTasks(newTasks);
     
-    // 2. Fire and Forget Remote Delete (Instant)
+    // 2. Trigger sync to propagate deletion
     if (state.isSignedIn) {
-      _syncOrchestrator.deleteRemoteTask(taskId);
+      _syncOrchestrator.scheduleSync();
     }
   }
 
@@ -222,9 +240,23 @@ class TaskNotifier extends Notifier<TaskState> {
     await _authService.signOut();
   }
   
+  Future<void> syncSingleTask(String taskId) async {
+    await _syncOrchestrator.syncTask(taskId);
+    await _loadTasks(); // Reload to reflect any pulled changes
+  }
+
+  Future<Map<String, dynamic>> getTaskSyncInfo(String taskId) async {
+    return await _syncOrchestrator.getTaskSyncInfo(taskId);
+  }
+
   Future<Map<String, int>> getSyncStats() async => await TaskStorage.getSyncStats();
   Future<DateTime?> getLastSyncTime() async => await TaskStorage.getLastSyncTime();
   Future<List<Task>> getTasksNeedingSync() async => await TaskStorage.getTasksNeedingSync();
+
+  Future<void> clearAllLocalData() async {
+    await TaskStorage.clearAllLocalData();
+    state = state.copyWith(tasks: []);
+  }
 }
 
 final taskProvider = NotifierProvider<TaskNotifier, TaskState>(() {

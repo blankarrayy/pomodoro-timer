@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/task.dart';
 
@@ -11,6 +12,17 @@ class SupabaseTaskRepository {
         .order('created_at', ascending: false);
 
     return (response as List).map((json) => Task.fromJson(json)).toList();
+  }
+
+  Future<Task?> getTask(String id) async {
+    try {
+      final response = await _client.from('tasks').select().eq('id', id).maybeSingle();
+      if (response == null) return null;
+      return Task.fromJson(response);
+    } catch (e) {
+      debugPrint('Error fetching single task: $e');
+      return null;
+    }
   }
 
   Future<Task> createTask(Task task) async {
@@ -55,6 +67,7 @@ class SupabaseTaskRepository {
   }
 
   Future<void> deleteTask(String taskId) async {
+    // Hard delete: Remove row from database
     await _client.from('tasks').delete().eq('id', taskId);
   }
   

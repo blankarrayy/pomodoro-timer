@@ -32,6 +32,15 @@ class TaskStorage {
     }
   }
 
+  /// Clear all local data (Reset)
+  static Future<void> clearAllLocalData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tasksKey);
+    await prefs.remove(_versionKey);
+    await prefs.remove('last_sync_time');
+    await prefs.remove('sync_stats');
+  }
+
   /// Load all tasks from storage
   static Future<List<Task>> loadTasks() async {
     try {
