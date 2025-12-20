@@ -50,8 +50,22 @@ class DesktopOverlayService {
   /// Initialize Windows overlay
   static Future<void> _initializeWindowsOverlay() async {
     try {
-      // For Windows, we'll create a system tray as well
-      await _initializeMacOSSystemTray();
+      // For Windows, system tray requires .ico file
+      // Use the app icon from windows/runner/resources/app_icon.ico
+      String iconPath = 'windows/runner/resources/app_icon.ico';
+      
+      await _systemTray.initSystemTray(
+        title: "FocusForge",
+        iconPath: iconPath,
+      );
+
+      // Register system tray event
+      _systemTray.registerSystemTrayEventHandler((eventName) {
+        debugPrint("eventName: $eventName");
+        if (eventName == 'leftMouseDown') {
+          _showMainWindow();
+        }
+      });
     } catch (e) {
       print('Error initializing Windows overlay: $e');
     }

@@ -69,6 +69,7 @@ class FocusForgeApp extends StatelessWidget {
           PointerDeviceKind.mouse,
           PointerDeviceKind.touch,
           PointerDeviceKind.stylus,
+          PointerDeviceKind.trackpad,
           PointerDeviceKind.unknown,
         },
       ),

@@ -60,7 +60,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         children: [
           SafeArea(
             child: CustomScrollView(
-              physics: const BouncingScrollPhysics(),
+              physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 const SliverToBoxAdapter(
                   child: SizedBox(height: 16),

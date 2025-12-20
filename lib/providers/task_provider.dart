@@ -15,12 +15,14 @@ class TaskNotifier extends Notifier<TaskState> {
   final TaskSyncService _syncService = TaskSyncService();
   
   StreamSubscription? _authStateSubscription;
+  Timer? _periodicSyncTimer;
 
   @override
   TaskState build() {
     // Initialize services and subscription on dispose
     ref.onDispose(() {
       _authStateSubscription?.cancel();
+      _periodicSyncTimer?.cancel();
     });
 
     // Schedule async initialization
@@ -53,6 +55,9 @@ class TaskNotifier extends Notifier<TaskState> {
 
       if (isSignedIn) {
          await syncTasks();
+         _startPeriodicSync();
+      } else {
+         _stopPeriodicSync();
       }
     });
 
@@ -62,6 +67,11 @@ class TaskNotifier extends Notifier<TaskState> {
       userEmail: currentUser?.email,
       syncStatus: currentUser != null ? 'Ready to sync' : 'Not signed in',
     );
+    
+    // Start periodic sync if already signed in
+    if (currentUser != null) {
+      _startPeriodicSync();
+    }
   }
 
   Future<void> _loadTasks() async {
@@ -71,6 +81,27 @@ class TaskNotifier extends Notifier<TaskState> {
     } catch (e) {
       debugPrint('Error loading tasks: $e');
     }
+  }
+
+  void _startPeriodicSync() {
+    // Cancel existing timer if any
+    _periodicSyncTimer?.cancel();
+    
+    // Start a periodic timer that syncs every 5 minutes
+    _periodicSyncTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
+      if (state.isSignedIn && !state.isSyncing) {
+        debugPrint('Auto-resync triggered (5-minute interval)');
+        syncTasks();
+      }
+    });
+    
+    debugPrint('Periodic sync started (every 5 minutes)');
+  }
+  
+  void _stopPeriodicSync() {
+    _periodicSyncTimer?.cancel();
+    _periodicSyncTimer = null;
+    debugPrint('Periodic sync stopped');
   }
 
   Future<void> syncTasks() async {

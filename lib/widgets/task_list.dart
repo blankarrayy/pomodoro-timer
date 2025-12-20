@@ -164,6 +164,24 @@ class _TaskListState extends ConsumerState<TaskList> {
               ],
             ),
           ),
+        if (isSignedIn) const SizedBox(width: 8),
+        if (isSignedIn)
+          IconButton(
+            onPressed: isSyncing ? null : () => ref.read(taskProvider.notifier).syncTasks(),
+            style: IconButton.styleFrom(
+              backgroundColor: AppTheme.surfaceLight.withOpacity(0.3),
+              padding: const EdgeInsets.all(8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            icon: Icon(
+              Icons.refresh_rounded,
+              size: 18,
+              color: isSyncing ? AppTheme.textSecondary.withOpacity(0.5) : AppTheme.textSecondary,
+            ),
+            tooltip: 'Resync Tasks',
+          ),
         const SizedBox(width: 8),
         IconButton(
           onPressed: () => _showAddTaskSheet(context, ref),
